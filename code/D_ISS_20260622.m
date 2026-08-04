@@ -123,13 +123,22 @@ MINUTES_PER_DAY_SQUARED = (MINUTES_PER_DAY * MINUTES_PER_DAY);
 MINUTES_PER_DAY_CUBED = (MINUTES_PER_DAY * MINUTES_PER_DAY_SQUARED);
 
 % TLE file name
-fname = 'ISS.txt';
+tleFile = "ISS_20260516.tle";
 
-% Open the TLE file and read TLE elements
-fid = fopen(fname, 'r');
+% Read a standard .tle file. The file may contain an optional satellite-name
+% line before the two element lines.
+tleLines = strip(readlines(tleFile));
+tleLines(tleLines == "") = [];
 
-% read first line
-tline = fgetl(fid);
+line1Index = find(startsWith(tleLines, "1 "), 1, "first");
+line2Index = find(startsWith(tleLines, "2 "), 1, "first");
+
+if isempty(line1Index) || isempty(line2Index) || line2Index <= line1Index
+    error("Invalid TLE file '%s': TLE line 1 or line 2 is missing.", tleFile);
+end
+
+% Parse TLE line 1
+tline = char(tleLines(line1Index));
 Cnum = tline(3:7);
 SC   = tline(8);
 ID   = tline(10:17);
@@ -145,8 +154,8 @@ BStar = BStar*1e-5*10^ExBStar;
 Etype = tline(63);
 Enum  = str2num(tline(65:end));
 
-% read second line
-tline = fgetl(fid);
+% Parse TLE line 2
+tline = char(tleLines(line2Index));
 i = str2num(tline(9:16));
 raan = str2num(tline(18:25));
 e = str2num(strcat('0.',tline(27:33)));
@@ -155,8 +164,6 @@ M = str2num(tline(44:51));
 no = str2num(tline(53:63));
 a = ( ge/(no*2*pi/86400)^2 )^(1/3);
 rNo = str2num(tline(65:end));
-
-fclose(fid);
 
 satdata.epoch             = epoch;
 satdata.norad_number      = Cnum;
@@ -359,12 +366,12 @@ for tsince = t
 
     if dt_meas<seconds(0.5) && measured_data.Elevation_deg(k_meas) > 0
         doppler_error(j) = doppler_meas_match(j) - dopplerShift(j);
-        azimuth_error(j) = azimuth_meas_match(j) - azimuth(j);
+        azimuth_error(j) = wrapTo180_local(azimuth_meas_match(j) - azimuth(j));
         elevation_error(j) = elevation_meas_match(j) - elevation(j);
     end
 
     % ---------- update only when satellite is above horizon in measured data ----------
-    if dt_meas<seconds(0.5) && measured_data.Elevation_deg(k_meas) > 0
+    if 0%dt_meas<seconds(0.5) && measured_data.Elevation_deg(k_meas) > 0
 
         z = measured_data.Doppler_Hz(k_meas);
 
@@ -417,7 +424,7 @@ for tsince = t
         dopplerShift(j) = - (range_rate / c) * fc;
 
         doppler_error(j) = doppler_meas_match(j) - dopplerShift(j);
-        azimuth_error(j) = azimuth_meas_match(j) - azimuth(j);
+        azimuth_error(j) = wrapTo180_local(azimuth_meas_match(j) - azimuth(j));
         elevation_error(j) = elevation_meas_match(j) - elevation(j);
 
         update_flag(j) = true;
