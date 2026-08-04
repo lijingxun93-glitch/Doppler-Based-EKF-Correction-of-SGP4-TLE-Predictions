@@ -1,0 +1,21 @@
+# MATLAB autosave files
+*.asv
+*.m~
+
+# MATLAB generated files
+*.mex*
+*.slxc
+*.autosave
+
+# MATLAB and Simulink generated folders
+slprj/
+sccprj/
+codegen/
+
+# Packaged MATLAB files
+*.mlappinstall
+*.mltbx
+
+# Operating-system files
+.DS_Store
+Thumbs.db
