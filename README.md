@@ -2,7 +2,7 @@
 
 ## Overview
 
-This repository contains MATLAB code developed for a masters project on improving low Earth orbit (LEO) satellite predictions. The project investigates whether Doppler shift measurements from ground stations can be used to correct trajectory predictions produced from Two-Line Element (TLE) data using the Simplified General Perturbations 4 (SGP4) model.
+This repository contains MATLAB code developed for a master's project on improving low Earth orbit (LEO) satellite predictions. The project investigates whether Doppler shift measurements from ground stations can be used to correct trajectory predictions produced from Two-Line Element (TLE) data using the Simplified General Perturbations 4 (SGP4) model.
 
 SGP4/TLE propagation is computationally efficient, but its prediction accuracy generally decreases as the propagation time from the TLE epoch increases. The implemented method first estimates and, when necessary, removes a significant temporal offset between the predicted and reference observations. An extended Kalman filter (EKF) then uses Doppler residuals to update selected orbital parameters.
 
