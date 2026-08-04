@@ -1,0 +1,20 @@
+measured_data = readtable('C:\Users\22743\Desktop\Master project\satellite data\20260419\az_el_doppler_1s.csv'); % Prealloc 
+t_real = datetime(2026,4,19,04,12,39,'TimeZone','UTC') + seconds(measured_data.t_video_sec_); 
+fr_real = [measured_data.doppler_hz;0] - [0;measured_data.doppler_hz]; 
+fr_real(end) = []; fr_real(1) = 0; 
+idx_real = find(measured_data.elevation_deg>0); 
+figure(2);
+subplot(2,1,1);
+plot(t_real(idx_real),measured_data.doppler_hz(idx_real)); grid on; hold on;
+ylabel('Doppler (Hz)'); title('Doppler shift'); 
+% subplot(2,2,2); 
+% plot(t_real(idx_real),movmean(fr_real(idx_real),5)); grid on; hold on;
+% ylabel('Doppler rate (Hz/s)'); title('Doppler rate'); 
+subplot(2,2,3);
+ylabel('Angles (deg)'); 
+plot(t_real(idx_real),measured_data.azimuth_deg(idx_real));  grid on; hold on;
+title('Az angles'); 
+subplot(2,2,4);
+ylabel('Angles (deg)'); 
+plot(t_real(idx_real),measured_data.elevation_deg(idx_real));grid on; hold on;
+title('El angles'); % xlabel('Time (UTC)'); 
