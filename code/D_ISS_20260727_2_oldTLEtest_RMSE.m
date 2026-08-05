@@ -267,7 +267,7 @@ Q = diag([ ...
 ].^2);
 
 % Doppler measurement noise
-R = 20^2 ;   % Hz^2, start with 10 Hz std
+R = 10^2 ;   % Hz^2, start with 10 Hz std
 
 j = 1;
 
@@ -463,11 +463,11 @@ error_EKF_plot = [doppler_error(:), azimuth_error(:), elevation_error(:)];
 [t_error_EKF_plot, error_EKF_plot] = ...
     insert_nan_at_time_gaps(t_EKF, error_EKF_plot);
 
-% Calculate RMSE separately for every continuous finite error segment.
-% NaN samples (including the inserted pass breaks) separate the segments.
-doppler_rmse_segments   = rmse_by_segment(error_EKF_plot(:,1));
-azimuth_rmse_segments   = rmse_by_segment(error_EKF_plot(:,2));
-elevation_rmse_segments = rmse_by_segment(error_EKF_plot(:,3));
+% RMSE over the last 30 finite error samples (or all if fewer than 30).
+% The NaN pass breaks remain in the plot but are excluded from the RMSE.
+doppler_rmse_ekf   = rmse_last_valid(error_EKF_plot(:,1), 30);
+azimuth_rmse_ekf   = rmse_last_valid(error_EKF_plot(:,2), 30);
+elevation_rmse_ekf = rmse_last_valid(error_EKF_plot(:,3), 30);
 
 subplot(3,2,1);
 plot(t_EKF_plot, ekf_plot_data(:,1));
@@ -479,7 +479,7 @@ grid on;
 xlabel('Time (UTC)');
 ylabel('Doppler residual (Hz)');
 title({'Doppler residual', ...
-       format_segment_rmse(doppler_rmse_segments, 'Hz')});
+       sprintf('RMSE of last 30 valid errors = %.3f Hz', doppler_rmse_ekf)});
 yline(0,'--');
 
 subplot(3,2,3);
@@ -492,7 +492,7 @@ grid on;
 xlabel('Time (UTC)');
 ylabel('Azimuth error (°)');
 title({'Azimuth Error', ...
-       format_segment_rmse(azimuth_rmse_segments, 'deg')});
+       sprintf('RMSE of last 30 valid errors = %.6f deg', azimuth_rmse_ekf)});
 yline(0,'--');
 
 subplot(3,2,5);
@@ -505,7 +505,7 @@ grid on;
 xlabel('Time (UTC)');
 ylabel('Elevation error (°)');
 title({'Elevation Error', ...
-       format_segment_rmse(elevation_rmse_segments, 'deg')});
+       sprintf('RMSE of last 30 valid errors = %.6f deg', elevation_rmse_ekf)});
 yline(0,'--');
 
 subplot(3,2,1);
@@ -688,36 +688,17 @@ function [time_plot, data_plot] = insert_nan_at_time_gaps(time_values, data_valu
     data_plot(inserted_nan_idx, :) = NaN;
 end
 
-function rmse_values = rmse_by_segment(error_values)
-% Calculate one RMSE value for each continuous run of finite samples.
-
-    error_values = error_values(:);
-    valid_sample = isfinite(error_values);
-
-    segment_start = find(valid_sample & [true; ~valid_sample(1:end-1)]);
-    segment_end   = find(valid_sample & [~valid_sample(2:end); true]);
-
-    rmse_values = zeros(numel(segment_start), 1);
-    for ii = 1:numel(segment_start)
-        segment_error = error_values(segment_start(ii):segment_end(ii));
-        rmse_values(ii) = sqrt(mean(segment_error.^2));
-    end
-end
-
-function title_text = format_segment_rmse(rmse_values, unit_text)
-% Format all segment RMSE values as the second line of a subplot title.
-
-    if isempty(rmse_values)
-        title_text = 'RMSE: no valid segments';
+function rmse_value = rmse_last_valid(error_values, window_size)
+% Calculate RMSE from up to the last window_size finite error samples.
+    valid_errors = error_values(isfinite(error_values));
+    if isempty(valid_errors)
+        rmse_value = NaN;
         return;
     end
 
-    segment_text = arrayfun( ...
-        @(ii) sprintf('Segment %d = %.3f', ii, rmse_values(ii)), ...
-        (1:numel(rmse_values)).', 'UniformOutput', false);
-
-    title_text = sprintf('RMSE: %s %s', ...
-        strjoin(segment_text, ', '), unit_text);
+    first_idx = max(1, numel(valid_errors) - window_size + 1);
+    final_errors = valid_errors(first_idx:end);
+    rmse_value = sqrt(mean(final_errors.^2));
 end
 
 function format_datetime_axes_english(fig)

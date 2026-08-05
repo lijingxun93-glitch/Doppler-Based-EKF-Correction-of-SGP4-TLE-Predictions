@@ -33,14 +33,10 @@ doppler_error = measured_data_1.Doppler_Hz - doppler_ref;
 az_error      = wrapTo180_local(measured_data_1.Azimuth_deg - az_ref);
 el_error      = measured_data_1.Elevation_deg - el_ref;
 
-% Mean squared error over valid samples only
-idx_doppler_error = isfinite(doppler_error);
-idx_az_error      = isfinite(az_error);
-idx_el_error      = isfinite(el_error);
-
-doppler_rmse = sqrt(mean(doppler_error(idx_doppler_error).^2));
-az_rmse      = sqrt(mean(az_error(idx_az_error).^2));
-el_rmse      = sqrt(mean(el_error(idx_el_error).^2));
+% RMSE over the last 30 finite error samples (or all if fewer than 30).
+doppler_rmse = rmse_last_valid(doppler_error, 30);
+az_rmse      = rmse_last_valid(az_error, 30);
+el_rmse      = rmse_last_valid(el_error, 30);
 
 fig1 = figure(1);
 
@@ -59,7 +55,8 @@ plot(t1, doppler_error);
 grid on;
 xlabel('Time (UTC)');
 ylabel('Doppler residual (Hz)');
-title(sprintf('Doppler residual (RMSE = %.3f Hz)', doppler_rmse));
+title({'Doppler residual', ...
+       sprintf('RMSE of last 30 valid errors = %.3f Hz', doppler_rmse)});
 
 subplot(3,2,3);
 plot(measured_data_1.Time_UTC, measured_data_1.Azimuth_deg);
@@ -76,7 +73,8 @@ plot(t1, az_error);
 grid on;
 xlabel('Time (UTC)');
 ylabel('Azimuth error (deg)');
-title(sprintf('Azimuth Error (RMSE = %.6f deg)', az_rmse));
+title({'Azimuth Error', ...
+       sprintf('RMSE of last 30 valid errors = %.6f deg', az_rmse)});
 
 subplot(3,2,5);
 plot(measured_data_1.Time_UTC, measured_data_1.Elevation_deg);
@@ -93,7 +91,8 @@ plot(t1, el_error);
 grid on;
 xlabel('Time (UTC)');
 ylabel('Elevation error (deg)');
-title(sprintf('Elevation Error (RMSE = %.6f deg)', el_rmse));
+title({'Elevation Error', ...
+       sprintf('RMSE of last 30 valid errors = %.6f deg', el_rmse)});
 
 format_datetime_axes_english(fig1);
 
@@ -101,6 +100,19 @@ format_datetime_axes_english(fig1);
 function a = wrapTo180_local(a)
 % Wrap angle in degrees to [-180, 180].
     a = mod(a + 180, 360) - 180;
+end
+
+function rmse_value = rmse_last_valid(error_values, window_size)
+% Calculate RMSE from up to the last window_size finite error samples.
+    valid_errors = error_values(isfinite(error_values));
+    if isempty(valid_errors)
+        rmse_value = NaN;
+        return;
+    end
+
+    first_idx = max(1, numel(valid_errors) - window_size + 1);
+    final_errors = valid_errors(first_idx:end);
+    rmse_value = sqrt(mean(final_errors.^2));
 end
 %%
 measured_data = measured_data_2;
@@ -360,7 +372,7 @@ for tsince = t
 
     if dt_meas<seconds(0.5) && measured_data.Elevation_deg(k_meas) > 0
         doppler_error(j) = doppler_meas_match(j) - dopplerShift(j);
-        azimuth_error(j) = azimuth_meas_match(j) - azimuth(j);
+        azimuth_error(j) = wrapTo180_local(azimuth_meas_match(j) - azimuth(j));
         elevation_error(j) = elevation_meas_match(j) - elevation(j);
     end
 
@@ -418,7 +430,7 @@ for tsince = t
         dopplerShift(j) = - (range_rate / c) * fc;
 
         doppler_error(j) = doppler_meas_match(j) - dopplerShift(j);
-        azimuth_error(j) = azimuth_meas_match(j) - azimuth(j);
+        azimuth_error(j) = wrapTo180_local(azimuth_meas_match(j) - azimuth(j));
         elevation_error(j) = elevation_meas_match(j) - elevation(j);
 
         update_flag(j) = true;
@@ -428,14 +440,10 @@ for tsince = t
 end
 fig3 = figure(2);
 
-% Mean squared error over valid above-horizon matched samples only
-idx_doppler_error = isfinite(doppler_error);
-idx_azimuth_error = isfinite(azimuth_error);
-idx_elevation_error = isfinite(elevation_error);
-
-doppler_rmse_ekf = sqrt(mean(doppler_error(idx_doppler_error).^2));
-azimuth_rmse_ekf = sqrt(mean(azimuth_error(idx_azimuth_error).^2));
-elevation_rmse_ekf = sqrt(mean(elevation_error(idx_elevation_error).^2));
+% RMSE over the last 30 finite error samples (or all if fewer than 30).
+doppler_rmse_ekf   = rmse_last_valid(doppler_error, 30);
+azimuth_rmse_ekf   = rmse_last_valid(azimuth_error, 30);
+elevation_rmse_ekf = rmse_last_valid(elevation_error, 30);
 
 idx_EKF = find(elevation>0); 
 t_EKF = minutes(t)+startTime;
@@ -449,7 +457,8 @@ plot(minutes(t(idx_valid))+startTime, doppler_error(idx_valid), 'LineWidth', 1.2
 grid on;
 xlabel('Time (UTC)');
 ylabel('Doppler residual (Hz)');
-title(sprintf('Doppler residual (RMSE = %.3f Hz)', doppler_rmse_ekf));
+title({'Doppler residual', ...
+       sprintf('RMSE of last 30 valid errors = %.3f Hz', doppler_rmse_ekf)});
 yline(0,'--');
 
 subplot(3,2,3);
@@ -462,7 +471,8 @@ plot(minutes(t(idx_valid))+startTime, azimuth_error(idx_valid), 'LineWidth', 1.2
 grid on;
 xlabel('Time (UTC)');
 ylabel('Azimuth error (°)');
-title(sprintf('Azimuth Error (RMSE = %.6f deg)', azimuth_rmse_ekf));
+title({'Azimuth Error', ...
+       sprintf('RMSE of last 30 valid errors = %.6f deg', azimuth_rmse_ekf)});
 yline(0,'--');
 
 subplot(3,2,5);
@@ -475,7 +485,8 @@ plot(minutes(t(idx_valid))+startTime, elevation_error(idx_valid), 'LineWidth', 1
 grid on;
 xlabel('Time (UTC)');
 ylabel('Elevation error (°)');
-title(sprintf('Elevation Error (RMSE = %.6f deg)', elevation_rmse_ekf));
+title({'Elevation Error', ...
+       sprintf('RMSE of last 30 valid errors = %.6f deg', elevation_rmse_ekf)});
 yline(0,'--');
 
 subplot(3,2,1);

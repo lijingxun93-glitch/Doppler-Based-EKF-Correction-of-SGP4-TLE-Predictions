@@ -33,14 +33,10 @@ doppler_error = measured_data_1.Doppler_Hz - doppler_ref;
 az_error      = wrapTo180_local(measured_data_1.Azimuth_deg - az_ref);
 el_error      = measured_data_1.Elevation_deg - el_ref;
 
-% Mean squared error over valid samples only
-idx_doppler_error = isfinite(doppler_error);
-idx_az_error      = isfinite(az_error);
-idx_el_error      = isfinite(el_error);
-
-doppler_rmse = sqrt(mean(doppler_error(idx_doppler_error).^2));
-az_rmse      = sqrt(mean(az_error(idx_az_error).^2));
-el_rmse      = sqrt(mean(el_error(idx_el_error).^2));
+% RMSE over the last 30 finite error samples (or all if fewer than 30).
+doppler_rmse = rmse_last_valid(doppler_error, 30);
+az_rmse      = rmse_last_valid(az_error, 30);
+el_rmse      = rmse_last_valid(el_error, 30);
 
 fig1 = figure(1);
 
@@ -51,7 +47,7 @@ plot(measured_data_2.Time_UTC, measured_data_2.Doppler_Hz);
 xlabel('Time (UTC)');
 ylabel('Doppler shift (Hz)');
 title('Doppler shifts');
-legend('TLE epoch at 2026-01-19', 'TLE epoch at 2026-07-26');
+legend('TLE epoch at 2026-05-16', 'TLE epoch at 2026-06-21');
 hold off;
 
 subplot(3,2,2);
@@ -59,7 +55,8 @@ plot(t1, doppler_error);
 grid on;
 xlabel('Time (UTC)');
 ylabel('Doppler residual (Hz)');
-title(sprintf('Doppler residual (RMSE = %.3f Hz)', doppler_rmse));
+title({'Doppler residual', ...
+       sprintf('RMSE of last 30 valid errors = %.3f Hz', doppler_rmse)});
 
 subplot(3,2,3);
 plot(measured_data_1.Time_UTC, measured_data_1.Azimuth_deg);
@@ -68,8 +65,7 @@ plot(measured_data_2.Time_UTC, measured_data_2.Azimuth_deg);
 xlabel('Time (UTC)');
 ylabel('Azimuth (deg)');
 title('Az angles');
-legend('TLE epoch at 2026-01-19', 'TLE epoch at 2026-07-26');
-
+legend('TLE epoch at 2026-05-16', 'TLE epoch at 2026-06-21');
 hold off;
 
 subplot(3,2,4);
@@ -77,7 +73,8 @@ plot(t1, az_error);
 grid on;
 xlabel('Time (UTC)');
 ylabel('Azimuth error (deg)');
-title(sprintf('Azimuth Error (RMSE = %.6f deg)', az_rmse));
+title({'Azimuth Error', ...
+       sprintf('RMSE of last 30 valid errors = %.6f deg', az_rmse)});
 
 subplot(3,2,5);
 plot(measured_data_1.Time_UTC, measured_data_1.Elevation_deg);
@@ -86,8 +83,7 @@ plot(measured_data_2.Time_UTC, measured_data_2.Elevation_deg);
 xlabel('Time (UTC)');
 ylabel('Elevation (deg)');
 title('El angles');
-legend('TLE epoch at 2026-01-19', 'TLE epoch at 2026-07-26');
-
+legend('TLE epoch at 2026-05-16', 'TLE epoch at 2026-06-21');
 hold off;
 
 subplot(3,2,6);
@@ -95,39 +91,35 @@ plot(t1, el_error);
 grid on;
 xlabel('Time (UTC)');
 ylabel('Elevation error (deg)');
-title(sprintf('Elevation Error (RMSE = %.6f deg)', el_rmse));
+title({'Elevation Error', ...
+       sprintf('RMSE of last 30 valid errors = %.6f deg', el_rmse)});
 
 format_datetime_axes_english(fig1);
+
 function a = wrapTo180_local(a)
 % Wrap angle in degrees to [-180, 180].
     a = mod(a + 180, 360) - 180;
 end
+
+function rmse_value = rmse_last_valid(error_values, window_size)
+% Calculate RMSE from up to the last window_size finite error samples.
+    valid_errors = error_values(isfinite(error_values));
+    if isempty(valid_errors)
+        rmse_value = NaN;
+        return;
+    end
+
+    first_idx = max(1, numel(valid_errors) - window_size + 1);
+    final_errors = valid_errors(first_idx:end);
+    rmse_value = sqrt(mean(final_errors.^2));
+end
 %%
 measured_data = measured_data_2;
-% t_real = datetime(2025,10,31,13,19,11,'TimeZone','UTC') + seconds(measured_data.Time_UTC); 
 
 t_real = measured_data.Time_UTC;
 idx_real = find(measured_data.Elevation_deg > 0);
 
-figure(2);
 
-subplot(3,2,1);
-plot(t_real(idx_real), measured_data.Doppler_Hz(idx_real)); 
-grid on; hold on;
-ylabel('Doppler (Hz)');
-title('Doppler shift');
-
-subplot(3,2,3);
-plot(t_real(idx_real), measured_data.Azimuth_deg(idx_real));  
-grid on; hold on;
-ylabel('Angles (deg)');
-title('Az angles');
-
-subplot(3,2,5);
-plot(t_real(idx_real), measured_data.Elevation_deg(idx_real));
-grid on; hold on;
-ylabel('Angles (deg)');
-title('El angles');
 
 %% ------------------------------------Model initialization-----------------------
 % 状态量删除doppler
@@ -143,13 +135,22 @@ MINUTES_PER_DAY_SQUARED = (MINUTES_PER_DAY * MINUTES_PER_DAY);
 MINUTES_PER_DAY_CUBED = (MINUTES_PER_DAY * MINUTES_PER_DAY_SQUARED);
 
 % TLE file name
-fname = 'NOAA15.txt';
+tleFile = "NOAA15_20260119.tle";
 
-% Open the TLE file and read TLE elements
-fid = fopen(fname, 'r');
+% Read a standard .tle file. The file may contain an optional satellite-name
+% line before the two element lines.
+tleLines = strip(readlines(tleFile));
+tleLines(tleLines == "") = [];
 
-% read first line
-tline = fgetl(fid);
+line1Index = find(startsWith(tleLines, "1 "), 1, "first");
+line2Index = find(startsWith(tleLines, "2 "), 1, "first");
+
+if isempty(line1Index) || isempty(line2Index) || line2Index <= line1Index
+    error("Invalid TLE file '%s': TLE line 1 or line 2 is missing.", tleFile);
+end
+
+% Parse TLE line 1
+tline = char(tleLines(line1Index));
 Cnum = tline(3:7);
 SC   = tline(8);
 ID   = tline(10:17);
@@ -165,8 +166,8 @@ BStar = BStar*1e-5*10^ExBStar;
 Etype = tline(63);
 Enum  = str2num(tline(65:end));
 
-% read second line
-tline = fgetl(fid);
+% Parse TLE line 2
+tline = char(tleLines(line2Index));
 i = str2num(tline(9:16));
 raan = str2num(tline(18:25));
 e = str2num(strcat('0.',tline(27:33)));
@@ -175,8 +176,6 @@ M = str2num(tline(44:51));
 no = str2num(tline(53:63));
 a = ( ge/(no*2*pi/86400)^2 )^(1/3);
 rNo = str2num(tline(65:end));
-
-fclose(fid);
 
 satdata.epoch             = epoch;
 satdata.norad_number      = Cnum;
@@ -195,6 +194,13 @@ satdata.xndd6o            = TD2 * 10^ExTD2 * TWOPI / MINUTES_PER_DAY_CUBED;
 satdata.bstar             = BStar;
 
 satdata_err = satdata;
+
+TimeShift = measured_data_2.Time_UTC(1)-measured_data_1.Time_UTC(1);
+if abs(minutes(TimeShift)) > 1
+    satdata_err.epoch = satdata_err.epoch + minutes(TimeShift)/60/24;
+    doy = doy + minutes(TimeShift)/60/24;
+end
+
 
 % read Earth orientation parameters
 fid = fopen('EOP-All.txt','r');
@@ -234,7 +240,7 @@ gs.lon_deg  = 51.35;
 gs.alt_m    = 1191;
 
 % ------ choose model start time
-startTime = datetime(2026,7,27,15,21,00);  
+startTime = datetime(2026,7,27,15,21,00);
 t_epoch   = datetime(year,mon,day,hr,minute,sec);
 t_start   = startTime - t_epoch;   % duration
 
@@ -274,16 +280,6 @@ x = zeros(7,1);
 F = eye(7);
 
 % Initial uncertainty P
-% 这里的值要和你给 satdata_err 加入的误差量级接近
-% P = diag([ ...
-%     deg2rad(1.0), ...     % dM
-%     deg2rad(0.5), ...     % dRAAN
-%     deg2rad(0.5), ...     % dARGP
-%     deg2rad(0.2), ...     % dINC
-%     5e-4, ...             % de
-%     satdata.xno*1e-4, ... % dn
-%     max(abs(satdata.bstar),1e-8) ...
-% ].^2);
 
 P = diag([ ...
     deg2rad(5), ...
@@ -307,7 +303,7 @@ Q = diag([ ...
 ].^2);
 
 % Doppler measurement noise
-R = 20^2;   % Hz^2, start with 10 Hz std
+R = 20^2 ;   % Hz^2, start with 10 Hz std
 
 j = 1;
 for tsince = t
@@ -382,7 +378,7 @@ for tsince = t
 
     if dt_meas<seconds(0.5) && measured_data.Elevation_deg(k_meas) > 0
         doppler_error(j) = doppler_meas_match(j) - dopplerShift(j);
-        azimuth_error(j) = azimuth_meas_match(j) - azimuth(j);
+        azimuth_error(j) = wrapTo180_local(azimuth_meas_match(j) - azimuth(j));
         elevation_error(j) = elevation_meas_match(j) - elevation(j);
     end
 
@@ -440,7 +436,7 @@ for tsince = t
         dopplerShift(j) = - (range_rate / c) * fc;
 
         doppler_error(j) = doppler_meas_match(j) - dopplerShift(j);
-        azimuth_error(j) = azimuth_meas_match(j) - azimuth(j);
+        azimuth_error(j) = wrapTo180_local(azimuth_meas_match(j) - azimuth(j));
         elevation_error(j) = elevation_meas_match(j) - elevation(j);
 
         update_flag(j) = true;
@@ -450,22 +446,16 @@ for tsince = t
 end
 fig3 = figure(2);
 
-% Mean squared error over valid above-horizon matched samples only
-idx_doppler_error = isfinite(doppler_error);
-idx_azimuth_error = isfinite(azimuth_error);
-idx_elevation_error = isfinite(elevation_error);
-
-doppler_rmse_ekf = sqrt(mean(doppler_error(idx_doppler_error).^2));
-azimuth_rmse_ekf = sqrt(mean(azimuth_error(idx_azimuth_error).^2));
-elevation_rmse_ekf = sqrt(mean(elevation_error(idx_elevation_error).^2));
+% RMSE over the last 30 finite error samples (or all if fewer than 30).
+doppler_rmse_ekf   = rmse_last_valid(doppler_error, 30);
+azimuth_rmse_ekf   = rmse_last_valid(azimuth_error, 30);
+elevation_rmse_ekf = rmse_last_valid(elevation_error, 30);
 
 idx_EKF = find(elevation>0); 
 t_EKF = minutes(t)+startTime;
 subplot(3,2,1);
 plot(t_EKF(idx_EKF),dopplerShift(idx_EKF));
-legend('TLE epoch at 2026-01-19','TLE epoch at 2026-07-26','Location','best'); 
-title('Doppler shifts');
-hold off;
+hold on;
 
 subplot(3,2,2);
 idx_valid = ~isnan(doppler_error);
@@ -473,14 +463,13 @@ plot(minutes(t(idx_valid))+startTime, doppler_error(idx_valid), 'LineWidth', 1.2
 grid on;
 xlabel('Time (UTC)');
 ylabel('Doppler residual (Hz)');
-title(sprintf('Doppler residual (RMSE = %.3f Hz)', doppler_rmse_ekf));
+title({'Doppler residual', ...
+       sprintf('RMSE of last 30 valid errors = %.3f Hz', doppler_rmse_ekf)});
 yline(0,'--');
 
 subplot(3,2,3);
 plot(t_EKF(idx_EKF),azimuth(idx_EKF));
-legend('TLE epoch at 2026-01-19','TLE epoch at 2026-07-26','Location','best'); 
-title('Azimuth');
-hold off;
+hold on;
 
 subplot(3,2,4);
 idx_valid = ~isnan(azimuth_error);
@@ -488,14 +477,13 @@ plot(minutes(t(idx_valid))+startTime, azimuth_error(idx_valid), 'LineWidth', 1.2
 grid on;
 xlabel('Time (UTC)');
 ylabel('Azimuth error (°)');
-title(sprintf('Azimuth Error (RMSE = %.6f deg)', azimuth_rmse_ekf));
+title({'Azimuth Error', ...
+       sprintf('RMSE of last 30 valid errors = %.6f deg', azimuth_rmse_ekf)});
 yline(0,'--');
 
 subplot(3,2,5);
 plot(t_EKF(idx_EKF),elevation(idx_EKF));
-legend('TLE epoch at 2026-01-19','TLE epoch at 2026-07-26','Location','best'); 
-title('Elevation');
-hold off;
+hold on;
 
 subplot(3,2,6);
 idx_valid = ~isnan(elevation_error);
@@ -503,8 +491,35 @@ plot(minutes(t(idx_valid))+startTime, elevation_error(idx_valid), 'LineWidth', 1
 grid on;
 xlabel('Time (UTC)');
 ylabel('Elevation error (°)');
-title(sprintf('Elevation Error (RMSE = %.6f deg)', elevation_rmse_ekf));
+title({'Elevation Error', ...
+       sprintf('RMSE of last 30 valid errors = %.6f deg', elevation_rmse_ekf)});
 yline(0,'--');
+
+subplot(3,2,1);
+plot(t_real(idx_real), measured_data.Doppler_Hz(idx_real)); 
+legend('TLE epoch at 2026-05-16', 'TLE epoch at 2026-06-21', 'Location','best'); 
+title('Doppler shifts');
+grid on; 
+ylabel('Doppler (Hz)');
+hold off;
+
+subplot(3,2,3);
+plot(t_real(idx_real), measured_data.Azimuth_deg(idx_real));  
+
+legend('TLE epoch at 2026-05-16', 'TLE epoch at 2026-06-21', 'Location','best'); 
+title('Azimuth');
+grid on; 
+ylabel('Angles (deg)');
+title('Az angles');
+hold off;
+
+subplot(3,2,5);
+plot(t_real(idx_real), measured_data.Elevation_deg(idx_real));
+grid on; 
+ylabel('Angles (deg)');
+title('El angles');
+legend('TLE epoch at 2026-05-16', 'TLE epoch at 2026-06-21', 'Location','best'); 
+hold off;
 
 format_datetime_axes_english(fig3);
 function satdata_new = apply_tle_state_correction(satdata_base, x)
@@ -604,8 +619,6 @@ function angle_out = wrapTo2Pi_local(angle_in)
         angle_out = angle_out + 2*pi;
     end
 end
-
-
 function format_datetime_axes_english(fig)
 % Show time at each tick and one English date per subplot.
 
