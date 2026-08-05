@@ -31,6 +31,7 @@ $$
 \delta B_k^{*}
 \end{bmatrix}^{\mathrm{T}}
 $$
+
 where $M$ is mean anomaly, $\Omega$ is the right ascension of the ascending node, $\omega$ is the argument of perigee, $i$ is inclination, $e$ is eccentricity, $n$ is mean motion, and $B^*$ is the drag term.
 
 ## Main Features
