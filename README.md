@@ -19,17 +19,18 @@ The main processing sequence is:
 
 The EKF state vector used in the project is based on selected TLE/SGP4 parameters:
 
-$
+$$
+\delta \mathbf{x}_k =
 \begin{bmatrix}
 \delta M_k &
-\delta\Omega_k &
-\delta\omega_k &
+\delta \Omega_k &
+\delta \omega_k &
 \delta i_k &
 \delta e_k &
 \delta n_k &
-\delta B^*_k
-\end{bmatrix}^{\mathrm{T}},
-$
+\delta B_k^{*}
+\end{bmatrix}^{\mathrm{T}}
+$$
 where $M$ is mean anomaly, $\Omega$ is the right ascension of the ascending node, $\omega$ is the argument of perigee, $i$ is inclination, $e$ is eccentricity, $n$ is mean motion, and $B^*$ is the drag term.
 
 ## Main Features
